@@ -1,0 +1,60 @@
+Dear Andrew,
+
+The information that you should use the datalink service to get to the ancillary files  is provided in the programmatic overview page: http://archive.eso.org/cms/eso-data/programmatic-access.html
+but I fully agree that that is not enough. I will publish a script for that.
+Thanks for pointing this out. In the meantime...
+
+Here I provide you preliminary snippets of the code necessary to do that, with explanations.
+
+As said, it is the datalink service that allows you to find all kinds of files related to the input one.
+The datalink response for a HARPS calibrated spectrum contains, among others, the ancillary file you want to download (the tar ball).
+As an example, try:
+http://archive.eso.org/datalink/links?ID=ivo://eso.org/ID?ADP.2014-09-16T11:03:30.940
+The ancillary files can be identified by the "semantics" field which must be set to "#auxiliary".
+
+In python:
+
+import eso_programmatic.py as eso 
+
+# The eso_programmatic.py
+# is published here: http://archive.eso.org/programmatic/HOWTO/jupyter/authentication_and_authorisation/eso_programmatic.py
+
+# Let's get the access_url of 3 HARPS products:
+query = """SELECT top 3 access_url from ivoa.ObsCore where obs_collection='HARPS'"""
+res = tap.search(query)
+print(res)
+                                      access_url                                     
+                                        object                                       
+-------------------------------------------------------------------------------------
+http://archive.eso.org/datalink/links?ID=ivo://eso.org/ID?ADP.2014-09-16T11:03:30.940
+http://archive.eso.org/datalink/links?ID=ivo://eso.org/ID?ADP.2014-09-16T11:03:30.947
+http://archive.eso.org/datalink/links?ID=ivo://eso.org/ID?ADP.2014-09-16T11:03:30.973
+# Let's loop through those 3, and for each of them loop through its #auxiliary entries (the tar ball is the only #auxiliary for an HARPS product anyway):
+for rec in (res):
+    datalink = vo.dal.adhoc.DatalinkResults.from_result_url(rec['access_url'], session=session)
+    ancillaries = datalink.bysemantics('#auxiliary')
+    for anc in ancillaries:
+        # for each ancillary, get its access_url, and use it to download the file
+        # other useful info available:  print(anc['eso_category'], anc['eso_origfile'], anc['content_length'], anc['access_url'])
+        status_code, filepath = eso.downloadURL(anc['access_url'], session=session)
+        if status_code == 200:
+            print("File {0} downloaded as {1}".format(anc['eso_origfile'], filepath))
+
+The result is:
+File HARPS.2006-08-09T05:48:52.136_DRS_HARPS_3.5.tar downloaded as ./ADP.2014-09-16T11:08:02.037.tar
+File HARPS.2006-01-30T08:42:04.135_DRS_HARPS_3.5.tar downloaded as ./ADP.2014-09-16T11:04:44.533.tar
+File HARPS.2006-07-30T07:45:53.333_DRS_HARPS_3.5.tar downloaded as ./ADP.2014-09-16T11:04:48.567.tar
+If you prefer to download the tar ball with its original name, then add "filename=anc['eso_origfile']" as in:
+
+        status_code, filepath = eso.downloadURL(anc['access_url'], filename=anc['eso_origfile'], session=session)
+
+and you'll obtain:
+File HARPS.2006-08-09T05:48:52.136_DRS_HARPS_3.5.tar downloaded as ./HARPS.2006-08-09T05:48:52.136_DRS_HARPS_3.5.tar
+File HARPS.2006-01-30T08:42:04.135_DRS_HARPS_3.5.tar downloaded as ./HARPS.2006-01-30T08:42:04.135_DRS_HARPS_3.5.tar
+File HARPS.2006-07-30T07:45:53.333_DRS_HARPS_3.5.tar downloaded as ./HARPS.2006-07-30T07:45:53.333_DRS_HARPS_3.5.tar
+
+Thanks a lot for reporting the absence of examples on this!
+Alberto
+--
+Alberto Micol
+ESO Archive Science Group
