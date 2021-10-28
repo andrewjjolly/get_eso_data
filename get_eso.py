@@ -8,6 +8,7 @@
 # 2. download the following files for this data for use with wobble:
 #       a) CCF files for each observation
 #       b) wavelength files
+#       c) other anciallary files
 #
 # 3. pre-process the files and create a data object for use with wobble (using the wobble functions, from_HARPS and from_ESPRESSO)
 # 4. MAYBE - create a plot of the pipeline RVs with associated errors, phase folded on known planets - although it might be easier to roll this into an analysis script.
@@ -16,7 +17,7 @@
 
 
 #=================================================================#
-# Things that are working - things that are left to do / problems
+# Things that are working - things that are left to do / problems - 28 Oct 2021
 #=================================================================#
 
 # Working:
@@ -25,18 +26,12 @@
 #   Downloads the science files for the dp IDs provided.
 #   Correctly identifies the missing calibration files from CCF files in a directory.
 #   Downloads the calibration files fro the eso archive when given a list of calibration files.
-#   Using from_HARPS correctly preproccesses a CCF file & calibration files to an hdf5 file for use with wobble#
-#
-# Immediate to fix:
-#   
-#   line 164 - Ancillary file identification returning an 'IsADirectoryError' - seems to be a filename issue?
-        
+#   Using from_HARPS correctly preproccesses a CCF file & calibration files to an hdf5 file for use with wobble        
 
 # To do:
 
-# Identify and download the correct ancillary files - possibly using the same download methods?
-# Identify files I need, files I don't need - automatically delete the ones I don't need (eventually work out a way of not downloading them).
-# Write the function that, from exofop gets the target names from the TESS TOIs that have HARPS/ESPRESSO data. Firstly for all current TOIs and then all new TOIs.
+# Ancillary file download fix
+
 
 
 import os
