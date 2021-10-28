@@ -67,24 +67,24 @@ import etta
 ESO_TAP_OBS = "http://archive.eso.org/tap_obs"
 tapobs = tap.TAPService(ESO_TAP_OBS)
 
-
+DATA_DIR = '/home/z5345592/data/tess_toi'
 UNPROCESSED_DIR = os.path.join(os.getcwd(), 'unprocessed/') #these three things as they were weren't returning the correct path, just 'unprocessed' as a string.
 TEMPLATE_DIR = os.path.join(os.getcwd(), 'template/')
 PROCESSED_DIR = os.path.join(os.getcwd(), 'processed/') #check to see if I can make this change to the other two lines - this now seems to work correctly in from_HARPS
 ESO_USERNAME = "andrewjolly"
 
 
-# downloading files
-SKIP = 0  # Skip how many batches at the start? (for if you are re-running this..)
-BATCH = 2000  # How many datasets should we get per ESO request?
-WAIT_TIME = 60  # Seconds between asking ESO if they have prepared our request
-DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
+# SKIP = 0  # Skip how many batches at the start? (for if you are re-running this..)
+# BATCH = 2000  # How many datasets should we get per ESO request?
+# WAIT_TIME = 60  # Seconds between asking ESO if they have prepared our request
+# DATA_DIR = os.path.join(os.path.dirname(__file__), "data").
 
 
 def main():
 
-    toi_list = get_toi()
-    # make_toi_dir
+    tess_toi_df = get_tess_toi_df()
+    # toi_names = get_toi_names(tess_toi_df)
+    # make_toi_dir(DATA_DIR, toi_name)
     # target_coords = 
     # dp_id_list = find_science_files('HD48611', 'HARPS')
     # download_science_files(dp_id_list)
@@ -105,12 +105,28 @@ def main():
 
 def get_tess_toi_df():
     tess_toi_df = etta.download_toi(sort = 'toi')
-    
+    tess_toi_df = tess_toi_df.sort_index(ascending=False) #puts the most recent TOIs first
+  
     return(tess_toi_df)
+
+def get_toi_names(tess_toi_df):
+
+    tess_toi_names = tess_toi_df.index
+    tess_toi_names = tess_toi_names.astype(str) #turn them into a string
+    tess_toi_names = tess_toi_names.str.replace('.', '_') #change the full stop in the toi name to an underscore, probably will be better for filenames etc.
+
+    return(tess_toi_names)
+
+def make_toi_dir(data_directory, folder_name):
+    path = os.path.join(os.path.join(DATA_DIR, 'test_name'))
+    if not os.path.exists(path):
+        os.mkdir(path)
+    else:
+        print('Directory already exists')
 
 
 def identify_targets():
-    """from a list of TESS TOIs, returns a list of known stellar names to query the ESO database with"""
+    """from a list of TESS TOIs, returns the coordinates to do a cone search with"""
 
     return target_name
 
@@ -400,6 +416,7 @@ def preprocess_files(ccf_files):
             print("File {0} failed; error: {1}".format(filename, e))
 
     return data.write(PROCESSED_DIR + '/wobble_data.hdf5')
+
 
 
 if __name__ == '__main__':
