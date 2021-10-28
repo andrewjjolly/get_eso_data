@@ -57,6 +57,7 @@ from astropy.visualization import astropy_mpl_style
 from astropy import table
 from astropy.coordinates import SkyCoord
 from astropy.units import Quantity
+from astropy import units as u
 from pyvo.dal import tap
 import pandas as pd
 import requests
@@ -83,24 +84,26 @@ ESO_USERNAME = "andrewjolly"
 def main():
 
     tess_toi_df = get_tess_toi_df()
-    # toi_names = get_toi_names(tess_toi_df)
-    # make_toi_dir(DATA_DIR, toi_name)
-    # target_coords = 
-    # dp_id_list = find_science_files('HD48611', 'HARPS')
-    # download_science_files(dp_id_list)
-    # ancillary_files = identify_ancillary(UNPROCESSED_DIR)
-    # download_ancillary(ancillary_files)
-    # ccf_files = get_ccf_files(UNPROCESSED_DIR)
-    # missing_files = identify_missing_files(ccf_files)
-    # download_files(missing_files)
-    # extracted_files_path = extract_files(UNPROCESSED_DIR)
-    # preprocess_files(ccf_files)
-    # print("preprocessed files: ", preprocessed_files_path)
-    # script_path = '/home/z5345592/projects/get_eso/data/download.sh'  #this line and the next are to manually check that the manually created bash script is working.
-    # subprocess.run([f"sh {script_path}"], shell=True)
+
+    for toi in tess_toi_df.index[0:2]: #swap to the entire thing, this is just for testing the first 2
+
+        toi_name = get_toi_name(tess_toi_df, toi)
+        make_toi_dir(DATA_DIR, toi_name)
+        toi_coords = get_coords(tess_toi_df, toi)
+        # dp_id_list = find_science_files('HD48611', 'HARPS')
+        # download_science_files(dp_id_list)
+        # ancillary_files = identify_ancillary(UNPROCESSED_DIR)
+        # download_ancillary(ancillary_files)
+        # ccf_files = get_ccf_files(UNPROCESSED_DIR)
+        # missing_files = identify_missing_files(ccf_files)
+        # download_files(missing_files)
+        # extracted_files_path = extract_files(UNPROCESSED_DIR)
+        # preprocess_files(ccf_files)
+        # print("preprocessed files: ", preprocessed_files_path)
+        # script_path = '/home/z5345592/projects/get_eso/data/download.sh'  #this line and the next are to manually check that the manually created bash script is working.
+        # subprocess.run([f"sh {script_path}"], shell=True)
 
     return
-
 
 
 def get_tess_toi_df():
@@ -109,38 +112,42 @@ def get_tess_toi_df():
   
     return(tess_toi_df)
 
-def get_toi_names(tess_toi_df):
+def get_toi_name(tess_toi_df, toi):
 
-    tess_toi_names = tess_toi_df.index
-    tess_toi_names = tess_toi_names.astype(str) #turn them into a string
-    tess_toi_names = tess_toi_names.str.replace('.', '_') #change the full stop in the toi name to an underscore, probably will be better for filenames etc.
+    toi_name = tess_toi_df.loc[toi].name #gets the record from the df and slices out the name
+    toi_name = toi_name.astype(str) #turn into a string so the replace line following works
+    toi_name = toi_name.replace('.','_')
 
-    return(tess_toi_names)
+    return(toi_name)
 
-def make_toi_dir(data_directory, folder_name):
-    path = os.path.join(os.path.join(DATA_DIR, 'test_name'))
+def make_toi_dir(data_directory, toi_name):
+    path = os.path.join(os.path.join(DATA_DIR, toi_name))
     if not os.path.exists(path):
         os.mkdir(path)
     else:
         print('Directory already exists')
 
 
-def identify_targets():
-    """from a list of TESS TOIs, returns the coordinates to do a cone search with"""
+def get_coords(tess_toi_df, toi):
+    """gets the RA & Dec of the target to be able to do a cone search."""
+    toi_ra = tess_toi_df.loc[toi].RA
+    toi_dec = tess_toi_df.loc[toi].Dec
+    toi_coords = SkyCoord(ra = toi_ra, dec = toi_dec, unit = (u.hour, u.degree), frame='icrs')
+    print(toi_coords)
 
-    return target_name
+    return toi_coords
 
 
 def find_science_files(target_name, instrument_name):
     """from a target name and a particular ESO instrument, returns the available science files for downloading."""  
 
-    pos = SkyCoord.from_name(target_name) # Defining the position via SESAME name resolver, and the search radius, pos now contains the coordinates of target.
+    pos = toi_cords # unsure why this line is necessary but not changing it yet.
    
     print("SESAME coordinates for %s: %s (truncated to millidegrees)\n" % (target_name, pos.to_string()))
 
-    sr = 2.5/60. # search radius of 2.5 arcmin, always expressed in degrees
+    sr = 1/60. # search radius of 2.5 arcmin, always expressed in degrees
 
-    # Cone search: looking for footprints of reduced datasets intersecting a circle of 2.5' around target
+    # Cone search: looking for footprints of reduced datasets intersecting a circle of 1' around target
     query = """SELECT *
     FROM ivoa.ObsCore
     WHERE intersects(s_region, circle('', %f, %f, %f))=1
