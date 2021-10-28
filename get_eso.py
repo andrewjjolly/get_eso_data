@@ -68,7 +68,7 @@ import etta
 ESO_TAP_OBS = "http://archive.eso.org/tap_obs"
 tapobs = tap.TAPService(ESO_TAP_OBS)
 
-DATA_DIR = '/home/z5345592/data/tess_toi'
+DATA_DIR = '/home/z5345592/data/tess_toi/'
 UNPROCESSED_DIR = os.path.join(os.getcwd(), 'unprocessed/') #these three things as they were weren't returning the correct path, just 'unprocessed' as a string.
 TEMPLATE_DIR = os.path.join(os.getcwd(), 'template/')
 PROCESSED_DIR = os.path.join(os.getcwd(), 'processed/') #check to see if I can make this change to the other two lines - this now seems to work correctly in from_HARPS
@@ -85,13 +85,13 @@ def main():
 
     tess_toi_df = get_tess_toi_df()
 
-    for toi in tess_toi_df.index[0:2]: #swap to the entire thing, this is just for testing the first 2
+    for toi in [4409.01, 4406.01]: #swap to the entire thing, this is just for testing 2 that I know have HARPS data
 
         toi_name = get_toi_name(tess_toi_df, toi)
-        make_toi_dir(DATA_DIR, toi_name)
+        data_dir = make_toi_dir(DATA_DIR, toi_name)
         toi_coords = get_coords(tess_toi_df, toi)
-        # dp_id_list = find_science_files('HD48611', 'HARPS')
-        # download_science_files(dp_id_list)
+        dp_id_list = find_science_files(toi_coords, 'HARPS')
+        download_science_files(dp_id_list, data_dir)
         # ancillary_files = identify_ancillary(UNPROCESSED_DIR)
         # download_ancillary(ancillary_files)
         # ccf_files = get_ccf_files(UNPROCESSED_DIR)
@@ -127,6 +127,7 @@ def make_toi_dir(data_directory, toi_name):
     else:
         print('Directory already exists')
 
+    return path
 
 def get_coords(tess_toi_df, toi):
     """gets the RA & Dec of the target to be able to do a cone search."""
@@ -137,15 +138,12 @@ def get_coords(tess_toi_df, toi):
 
     return toi_coords
 
-
-def find_science_files(target_name, instrument_name):
+def find_science_files(toi_coords, instrument_name):
     """from a target name and a particular ESO instrument, returns the available science files for downloading."""  
 
-    pos = toi_cords # unsure why this line is necessary but not changing it yet.
+    pos = toi_coords # unsure why this line is necessary but not changing it yet.
    
-    print("SESAME coordinates for %s: %s (truncated to millidegrees)\n" % (target_name, pos.to_string()))
-
-    sr = 1/60. # search radius of 2.5 arcmin, always expressed in degrees
+    sr = 1/60. # search radius of 1 arcmin, always expressed in degrees
 
     # Cone search: looking for footprints of reduced datasets intersecting a circle of 1' around target
     query = """SELECT *
@@ -165,7 +163,7 @@ def find_science_files(target_name, instrument_name):
     return dp_id_list
 
 
-def getDispositionFilename( response ):
+def getDispositionFilename(response):
     """Get the filename from the Content-Disposition in the response's http header"""
     contentdisposition = response.headers.get('Content-Disposition')
     if contentdisposition == None:
@@ -175,18 +173,18 @@ def getDispositionFilename( response ):
     return filename
 
 
-def writeFile( response ):
+def writeFile(response, data_dir):
     """Write on disk the retrieved file"""
     if response.status_code == 200:
         # The ESO filename can be found in the response header
         filename = getDispositionFilename( response )
         # Let's write on disk the downloaded FITS spectrum using the ESO filename:
-        with open(UNPROCESSED_DIR + filename, 'wb') as f:
+        with open(data_dir + '/' + filename, 'wb') as f:
             f.write(response.content)
         return filename 
 
 
-def download_science_files(dp_id_list):
+def download_science_files(dp_id_list, data_dir):
     """downloads science files from the ESO archive when given a filename"""
 
     for dp_id in dp_id_list:
@@ -194,7 +192,7 @@ def download_science_files(dp_id_list):
         file_url = 'https://dataportal.eso.org/dataportal_new/file/' + dp_id
 
         response = requests.get(file_url)
-        filename = writeFile( response )
+        filename = writeFile(response, data_dir)
         if filename:
             print("Saved file: %s" % (filename))
         else:
