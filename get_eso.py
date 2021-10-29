@@ -90,10 +90,9 @@ def main():
         dp_id_list = find_science_files(toi_coords, 'HARPS')
         download_science_files(dp_id_list, data_dir)
         download_ancillary_files(toi_coords, data_dir)
-        # ancillary_files = identify_ancillary(UNPROCESSED_DIR)
-        # download_ancillary(ancillary_files)
-        # ccf_files = get_ccf_files(UNPROCESSED_DIR)
-        # missing_files = identify_missing_files(ccf_files)
+        extract_files(data_dir)
+        ccf_files = get_ccf_files(data_dir)
+        missing_files = identify_missing_files(ccf_files)
         # download_files(missing_files)
         # extracted_files_path = extract_files(UNPROCESSED_DIR)
         # preprocess_files(ccf_files)
@@ -225,42 +224,6 @@ def download_ancillary_files(coords, data_dir):
             status_code, filepath = eso.downloadURL(anc['access_url'], data_dir, session=session)
             if status_code == 200:
                 print("File {0} downloaded as {1}".format(anc['eso_origfile'], filepath))
-
-
-
-
-def identify_ancillary(directory):
-    """identifies the ancillary files linked to a science file"""
-
-    ancillary_files = []
-    for file in os.listdir(directory):
-        science_file = fits.open(directory + file)
-        header = science_file[0].header
-        ancillary_file = header['ASSON1']
-        ancillary_file = ancillary_file.split('_')
-        ancillary_file = os.path.join('https://dataportal.eso.org/dataportal_new/file/', ancillary_file[0])
-        ancillary_files=np.append(ancillary_files, ancillary_file)
-
-    return ancillary_files
-
-
-def download_ancillary(ancillary_files):
-    """downloads ancillary files from the ESO"""
-    template_path = os.path.join(TEMPLATE_DIR, "download.sh.template")
-
-    with open(template_path, "r") as template:
-        template_contents = template.read()
-
-    script_path = os.path.join(DATA_DIR, "download.sh")
-
-    with open(script_path, "w") as script:
-        script.write(template_contents.replace("$$REMOTE_PATHS$$", "\n".join(ancillary_files)).replace("$$ESO_USERNAME$$", ESO_USERNAME))
-
-    print(f"Running script at {script_path}...")
-
-    subprocess.run([f"sh {script_path}"], shell=True)
-
-    return
 
 
 def identify_missing_files(ccf_files):
