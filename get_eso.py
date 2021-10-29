@@ -33,7 +33,6 @@
 # Ancillary file download fix
 
 
-
 import os
 from astropy.extern.configobj.validate import _test
 from astropy.io import fits
@@ -58,6 +57,9 @@ import pandas as pd
 import requests
 import cgi
 import etta
+from pyvo.utils.http import create_session
+import pyvo
+import eso_programmatic as eso
 
 
 ESO_TAP_OBS = "http://archive.eso.org/tap_obs"
@@ -80,13 +82,14 @@ def main():
 
     tess_toi_df = get_tess_toi_df()
 
-    for toi in [4409.01, 4406.01]: #swap to the entire thing, this is just for testing 2 that I know have HARPS data
+    for toi in [4409.01]: #swap to the entire thing, this is just for testing 2 that I know have HARPS data
 
         toi_name = get_toi_name(tess_toi_df, toi)
         data_dir = make_toi_dir(DATA_DIR, toi_name)
         toi_coords = get_coords(tess_toi_df, toi)
         dp_id_list = find_science_files(toi_coords, 'HARPS')
         download_science_files(dp_id_list, data_dir)
+        download_ancillary_files(toi_coords, data_dir)
         # ancillary_files = identify_ancillary(UNPROCESSED_DIR)
         # download_ancillary(ancillary_files)
         # ccf_files = get_ccf_files(UNPROCESSED_DIR)
@@ -194,6 +197,36 @@ def download_science_files(dp_id_list, data_dir):
             print("Could not get file (status: %d)" % (response.status_code))
 
     return
+
+
+def download_ancillary_files(coords, data_dir):
+
+    sr = 1/60 
+
+    query = """
+    SELECT top 100 access_url 
+    FROM ivoa.ObsCore 
+    WHERE instrument_name = 'HARPS'
+    AND intersects(s_region, circle('', %f, %f, %f))=1
+    """ % (coords.ra.degree , coords.dec.degree, sr)
+    
+    res = tapobs.search(query=query, maxrec=1000)
+    print(res)
+
+    session = create_session() #this needed to be added - otherwise not defined in loop below.
+
+    for rec in (res):
+        datalink = pyvo.dal.adhoc.DatalinkResults.from_result_url(rec['access_url'], session=session) #this line needed pyvo not vo
+        ancillaries = datalink.bysemantics('#auxiliary')
+        for anc in ancillaries:
+            print(anc)
+            # for each ancillary, get its access_url, and use it to download the file
+            # other useful info available:  print(anc['eso_category'], anc['eso_origfile'], anc['content_length'], anc['access_url'])
+            status_code, filepath = eso.downloadURL(anc['access_url'], data_dir, session=session)
+            if status_code == 200:
+                print("File {0} downloaded as {1}".format(anc['eso_origfile'], filepath))
+
+
 
 
 def identify_ancillary(directory):
