@@ -1,3 +1,5 @@
+#tl;dr @ 2/11/21 version: the code currently works with the most basic functionality necessary, but I still need to put my password in each time.
+
 #=================================================#
 # UPDATED - What is the intention of this script?
 #=================================================#
@@ -9,6 +11,7 @@
 #       a) CCF files for each observation
 #       b) wavelength files
 #       c) other anciallary files
+#       d) all science file (AJ question - why not just ALL available files?)
 #
 # 3. pre-process the files and create a data object for use with wobble (using the wobble functions, from_HARPS and from_ESPRESSO)
 # 4. MAYBE - create a plot of the pipeline RVs with associated errors, phase folded on known planets - although it might be easier to roll this into an analysis script.
@@ -17,20 +20,29 @@
 
 
 #=================================================================#
-# Things that are working - things that are left to do / problems - 28 Oct 2021
+# Things that are working - things that are left to do / problems - 2 Nov 2021
 #=================================================================#
 
 # Working:
 # 
-#   Correctly returns a list of the dp IDs from the ESO archive when given a name of a target.
-#   Downloads the science files for the dp IDs provided.
-#   Correctly identifies the missing calibration files from CCF files in a directory.
-#   Downloads the calibration files fro the eso archive when given a list of calibration files.
-#   Using from_HARPS correctly preproccesses a CCF file & calibration files to an hdf5 file for use with wobble        
+# Currently downloads everything correctly (apparently) when given a TOI name. This is just number 2 of the 4 above.       
 
-# To do:
+# Issues that need addressing with current functionality:
 
-# Ancillary file download fix
+# 1. I haven't checked to see whether what is downloaded is EXACTLY the same as if I was to do it manually. I am going to do this when doing
+#   first part of analysis.
+# 2. I have to put in my ESO password each time despite having passed store_password = True to the eso.login method. This means I can't just set it off.
+# 3. File handling is very janky - currently the 'missing files' are downloaded to the cwd and then moved to the correct directory.
+# 4. The whole code is a Frankenstein's monster of different methods and I think the solution to number 2 above could at least be solved by
+#   using the download ancillary files function below and changing #ancillary to different keywords as per https://www.ivoa.net/rdf/datalink/core/2021-10-28/datalink.html
+# 5. The whole code needs refactoring and commenting - maybe to do when further functionality added - see below.
+# 6. Printing out from the terminal when the code runs is a mess and doesn't have that much useful info - need to clean up.
+
+# Necessary functionality to be added
+
+# 1. At the moment I need to manually pass in TOI names. I need to add something that does a cone search and then IF it is more than zero - do the things
+# 2. There is no ESPRESSO downloading yet
+# 3. Be able to run from the command line and check to see if I already have the files (i.e. there could be new TOIs (likely), but also new HARPS/ESPRESSO)
 
 
 import os
@@ -59,7 +71,8 @@ import cgi
 import etta
 from pyvo.utils.http import create_session
 import pyvo
-import eso_programmatic as eso
+import eso_programmatic as esoprog
+from pathlib import Path
 
 
 ESO_TAP_OBS = "http://archive.eso.org/tap_obs"
@@ -72,9 +85,9 @@ PROCESSED_DIR = os.path.join(os.getcwd(), 'processed/') #check to see if I can m
 ESO_USERNAME = "andrewjolly"
 
 
-# SKIP = 0  # Skip how many batches at the start? (for if you are re-running this..)
-# BATCH = 2000  # How many datasets should we get per ESO request?
-# WAIT_TIME = 60  # Seconds between asking ESO if they have prepared our request
+SKIP = 0  # Skip how many batches at the start? (for if you are re-running this..)
+BATCH = 2000  # How many datasets should we get per ESO request?
+WAIT_TIME = 60  # Seconds between asking ESO if they have prepared our request
 # DATA_DIR = os.path.join(os.path.dirname(__file__), "data").
 
 
@@ -82,20 +95,22 @@ def main():
 
     tess_toi_df = get_tess_toi_df()
 
-    for toi in [4409.01]: #swap to the entire thing, this is just for testing 2 that I know have HARPS data
+    for toi in [4320.01, 4320.02, 4317.01]:
 
         toi_name = get_toi_name(tess_toi_df, toi)
         data_dir = make_toi_dir(DATA_DIR, toi_name)
+        print(data_dir)
         toi_coords = get_coords(tess_toi_df, toi)
         dp_id_list = find_science_files(toi_coords, 'HARPS')
         download_science_files(dp_id_list, data_dir)
         download_ancillary_files(toi_coords, data_dir)
         extract_files(data_dir)
         ccf_files = get_ccf_files(data_dir)
-        missing_files = identify_missing_files(ccf_files)
-        # download_files(missing_files)
-        # extracted_files_path = extract_files(UNPROCESSED_DIR)
-        # preprocess_files(ccf_files)
+        missing_files = identify_missing_files(ccf_files, data_dir)
+        download_files(missing_files, data_dir)
+        move_files(data_dir)
+        extract_files(data_dir)
+        extracted_files_path = extract_files(UNPROCESSED_DIR)
         # print("preprocessed files: ", preprocessed_files_path)
         # script_path = '/home/z5345592/projects/get_eso/data/download.sh'  #this line and the next are to manually check that the manually created bash script is working.
         # subprocess.run([f"sh {script_path}"], shell=True)
@@ -118,7 +133,7 @@ def get_toi_name(tess_toi_df, toi):
     return(toi_name)
 
 def make_toi_dir(data_directory, toi_name):
-    path = os.path.join(os.path.join(DATA_DIR, toi_name))
+    path = os.path.join(os.path.join(DATA_DIR, toi_name + '/'))
     if not os.path.exists(path):
         os.mkdir(path)
     else:
@@ -203,7 +218,7 @@ def download_ancillary_files(coords, data_dir):
     sr = 1/60 
 
     query = """
-    SELECT top 100 access_url 
+    SELECT top 1000 access_url 
     FROM ivoa.ObsCore 
     WHERE instrument_name = 'HARPS'
     AND intersects(s_region, circle('', %f, %f, %f))=1
@@ -221,19 +236,19 @@ def download_ancillary_files(coords, data_dir):
             print(anc)
             # for each ancillary, get its access_url, and use it to download the file
             # other useful info available:  print(anc['eso_category'], anc['eso_origfile'], anc['content_length'], anc['access_url'])
-            status_code, filepath = eso.downloadURL(anc['access_url'], data_dir, session=session)
+            status_code, filepath = esoprog.downloadURL(anc['access_url'], data_dir, session=session)
             if status_code == 200:
                 print("File {0} downloaded as {1}".format(anc['eso_origfile'], filepath))
 
 
-def identify_missing_files(ccf_files):
+def identify_missing_files(ccf_files, data_dir):
     """identifies missing HARPS calibration files and returns them as a list"""
     missing_files = []
     for f in ccf_files:
         sp = fits.open(f)
         header = sp[0].header
         wave_file = header['HIERARCH ESO DRS CAL TH FILE']
-        if os.path.isfile(os.path.join(UNPROCESSED_DIR, wave_file)):
+        if os.path.isfile(os.path.join(data_dir, wave_file)):
             continue
         else:
             missing_files = np.append(missing_files, wave_file)
@@ -244,15 +259,13 @@ def identify_missing_files(ccf_files):
 def get_ccf_files(dir):
     """Checks a directory and returns a list of cross-correlation files in the directory"""
     ccf_files = []
-    for file in os.listdir(dir):
-        if file.endswith("ccf_G2_A.fits"):
-            full_path = os.path.join(dir, file)
-            ccf_files.append(full_path)
+    for file in Path(dir).rglob('*ccf*.fits'):
+        ccf_files.append(file)
 
     return ccf_files
 
 
-def download_files(missing_files):
+def download_files(missing_files, data_dir):
     """downloads the missing calibration files from the ESO"""
 
     if not os.path.exists(DATA_DIR):
@@ -289,7 +302,7 @@ def download_files(missing_files):
     with open(template_path, "r") as template:
         template_contents = template.read()
 
-    script_path = os.path.join(DATA_DIR, "download.sh")
+    script_path = os.path.join(data_dir, "download.sh")
 
     with open(script_path, "w") as script:
         script.write(template_contents.replace("$$REMOTE_PATHS$$", "\n".join(remote_paths)).replace("$$ESO_USERNAME$$", ESO_USERNAME))
@@ -305,7 +318,7 @@ def find_remote_paths(data):
 
     # log in to eso
     eso = ESO()
-    eso.login(ESO_USERNAME)
+    eso.login(ESO_USERNAME, store_password=True)
 
     prepare_response = eso._session.request("POST", "http://dataportal.eso.org/rh/confirmation", data=data)
 
@@ -348,8 +361,8 @@ def find_remote_paths(data):
     print(f"Found {len(remote_paths)} remote paths for request_number {request_number}")
 
     # Remove anything from the astroquery cache.
-    for cached_file in glob(os.path.join(eso.cache_location, "*")):
-        os.remove(cached_file)
+    # for cached_file in glob(os.path.join(eso.cache_location, "*")):
+    #     os.remove(cached_file)
 
     return remote_paths
 
@@ -367,8 +380,8 @@ def is_eso_ready(eso, url, request_number):
     print(f"Current state {state} on request {request_number}")
 
     # clean_up
-    for cached_file in glob(os.path.join(eso.cache_location, "*")):
-        os.remove(cached_file)
+    # for cached_file in glob(os.path.join(eso.cache_location, "*")):
+    #     os.remove(cached_file)
 
     return state == "COMPLETE"
 
@@ -396,23 +409,10 @@ def extract_files(directory):
     return
 
 
-def preprocess_files(ccf_files):
-    "pre-processess data from CCF files & calibration files provided by the ESO for use with wobble"
-    #this is just from_HARPS currently - eventually need to change to deal with ESPRESSO (others?)
-    
-    data = wobble.Data() #create a wobble data object so it can be appended with the information from the CCF files
+def move_files(data_dir):
 
-    for filename in ccf_files:
-
-        try:
-            sp = wobble.Spectrum()
-            sp.from_HARPS(filename, process = True)
-            data.append(sp)
-        except Exception as e:
-            print("File {0} failed; error: {1}".format(filename, e))
-
-    return data.write(PROCESSED_DIR + '/wobble_data.hdf5')
-
+    for file in Path.cwd().glob('*.tar'):
+        Path(file).rename(Path(data_dir + file.name))
 
 
 if __name__ == '__main__':
