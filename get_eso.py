@@ -43,6 +43,8 @@
 # 1. At the moment I need to manually pass in TOI names. I need to add something that does a cone search and then IF it is more than zero - do the things
 # 2. There is no ESPRESSO downloading yet
 # 3. Be able to run from the command line and check to see if I already have the files (i.e. there could be new TOIs (likely), but also new HARPS/ESPRESSO)
+# 4. It would be nice to add something that can give me some sort of indication as to how far through the process I am with each file when I run the code.
+# 5. Actually only need a few different files - need to check what from_HARPS actually uses and then reassess.
 
 
 import os
@@ -95,7 +97,7 @@ def main():
 
     tess_toi_df = get_tess_toi_df()
 
-    for toi in [4320.01, 4320.02, 4317.01]:
+    for toi in [4304.01, 664.01, 731.01, 256.01, 2011.01]:
 
         toi_name = get_toi_name(tess_toi_df, toi)
         data_dir = make_toi_dir(DATA_DIR, toi_name)
